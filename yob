@@ -1,0 +1,104 @@
+#!/usr/bin/ruby
+
+require 'rubygems'
+require 'aws/s3'
+require 'gpgme'
+require 'sqlite3'
+require 'tempfile'
+require 'yaml'
+
+class Yob
+  ConfigurationError = Class.new(StandardError)
+
+  attr_reader :configuration, :db, :keys
+
+  def initialize(configuration)
+    @configuration = configuration
+
+    unless File.directory?(configuration["mysql_log_directory"])
+      raise ConfigurationError, "mysql_log_directory does not exist"
+    end
+
+    unless File.exists?(configuration["mysqldump_executable"])
+      raise ConfigurationError, "mysqldump_executable does not exist"
+    end
+
+    @db = SQLite3::Database.new("yob.db")
+    db.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, filename varchar(255) unique not null, file_size integer not null, file_time datetime not null)")
+
+    @keys = configuration["encryption_key_names"].collect {|name| GPGME.list_keys(name).first}
+    raise ConfigurationError, "One or more encryption keys not found in GnuPG keychain" if keys.empty? || !keys.all?
+
+    AWS::S3::Base.establish_connection!(:access_key_id => configuration["aws_access_key_id"], :secret_access_key => configuration["aws_secret_access_key"])
+
+    # Just do any old call to make sure our credentials are valid.
+    AWS::S3::Service.buckets
+  end
+
+  def full_backup
+    reader, writer = IO.pipe
+    fork do
+      reader.close
+      system("#{configuration["mysqldump_executable"]} --all-databases --skip-opt --create-options --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
+      writer.close
+    end
+
+    writer.close
+    Tempfile.open("yob") do |tempfile|
+      tempfile.unlink
+
+      GPGME.encrypt(keys, reader, tempfile)
+      reader.close
+      tempfile.rewind
+
+      AWS::S3::S3Object.store(Time.now.strftime("%Y%m%d-%H%M%S.sql.gpg"), tempfile, configuration["aws_bucket"])
+    end
+  end
+
+  def partial_backup
+    files = Dir["#{configuration["mysql_log_directory"]}/mysql-bin.*"]
+    files.each do |filename|
+      next if filename[-5..-1] == 'index'
+
+      stats = File.stat(filename)
+      file_time = stats.mtime.strftime("%Y-%m-%d %H:%M:%S")
+
+      row = db.get_first_row("SELECT id, file_size, file_time FROM files WHERE filename = ?", filename)
+      if row && row[1].to_i == stats.size && row[2] == file_time
+        puts "skipping #{filename}"
+      else
+        crypted_file_data = File.open(filename, "r") do |logfile|
+          GPGME.encrypt(keys, logfile)
+        end
+
+        puts "#{filename}: #{stats.size} => #{crypted_file_data.length}"
+        crypted_filename = "#{File.basename(filename)}.gpg"
+        puts "uploading #{crypted_filename}"
+        AWS::S3::S3Object.store(crypted_filename, crypted_file_data, configuration["aws_bucket"])
+        puts "uploaded"
+
+        if row
+          db.execute("UPDATE files SET file_size = ?, file_time = ? WHERE id = ?", stats.size, file_time, row[0])
+        else
+          stmt = db.prepare("INSERT INTO files (filename, file_size, file_time) VALUES (?, ?, ?)")
+          stmt.execute(filename, stats.size.to_s, file_time)
+        end
+      end
+    end
+  end
+end
+
+
+if ARGV.length != 1 || !%w(full partial).include?(ARGV[0])
+  puts "specify 'full' or 'partial' on the command line"
+  exit 1
+end
+
+configuration = YAML.load(IO.read(File.dirname(__FILE__) << "/yob.yml"))["configuration"]
+
+yob = Yob.new(configuration)
+if ARGV[0] == 'full'
+  yob.full_backup
+else
+  yob.partial_backup
+end

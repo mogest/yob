@@ -1,0 +1,9 @@
+configuration:
+  mysql_log_directory: /opt/local/var/db/mysql5
+  mysqldump_executable: /opt/local/bin/mysqldump5
+  aws_access_key_id: key_goes_here
+  aws_secret_access_key: secret_goes_here
+  aws_bucket: bucket_name_goes_here
+  encryption_key_names:
+    - key_id_goes_here
+    - another_key_id_goes_here_if_you_want
