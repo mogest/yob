@@ -31,8 +31,7 @@ class Yob
 
     AWS::S3::Base.establish_connection!(:access_key_id => configuration["aws_access_key_id"], :secret_access_key => configuration["aws_secret_access_key"])
 
-    # Just do any old call to make sure our credentials are valid.
-    AWS::S3::Service.buckets
+    AWS::S3::Bucket.find(configuration["aws_bucket"]) or raise "There is no such AWS bucket '#{configuration["aws_bucket"]}'"
   end
 
   def full_backup
