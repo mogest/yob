@@ -38,7 +38,7 @@ class Yob
     reader, writer = IO.pipe
     fork do
       reader.close
-      system("#{configuration["mysqldump_executable"]} --all-databases --skip-opt --create-options --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
+      system("#{configuration["mysqldump_executable"]} --all-databases --skip-opt --create-options --add-drop-database --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
       writer.close
     end
 
