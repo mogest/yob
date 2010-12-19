@@ -30,8 +30,6 @@ class Yob
     raise ConfigurationError, "One or more encryption keys not found in GnuPG keychain" if keys.empty? || !keys.all?
 
     AWS::S3::Base.establish_connection!(:access_key_id => configuration["aws_access_key_id"], :secret_access_key => configuration["aws_secret_access_key"])
-
-    AWS::S3::Bucket.find(configuration["aws_bucket"]) or raise "There is no such AWS bucket '#{configuration["aws_bucket"]}'"
   end
 
   def full_backup
@@ -50,7 +48,7 @@ class Yob
       reader.close
       tempfile.rewind
 
-      AWS::S3::S3Object.store(Time.now.strftime("%Y%m%d-%H%M%S.sql.gpg"), tempfile, configuration["aws_bucket"])
+      AWS::S3::S3Object.store(Time.now.strftime("%Y%m%d-%H%M%S.#{random_string}.sql.gpg"), tempfile, configuration["aws_bucket"])
     end
   end
 
@@ -71,7 +69,7 @@ class Yob
         end
 
         puts "#{filename}: #{stats.size} => #{crypted_file_data.length}"
-        crypted_filename = "#{File.basename(filename)}.gpg"
+        crypted_filename = "#{File.basename(filename)}.#{random_string}.gpg"
         puts "uploading #{crypted_filename}"
         AWS::S3::S3Object.store(crypted_filename, crypted_file_data, configuration["aws_bucket"])
         puts "uploaded"
@@ -84,6 +82,10 @@ class Yob
         end
       end
     end
+  end
+
+  def random_string
+    (0..15).inject("") {|s, i| s << (97 + rand(26)).chr}
   end
 end
 
