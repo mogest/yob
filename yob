@@ -48,7 +48,13 @@ class Yob
       reader.close
       tempfile.rewind
 
-      AWS::S3::S3Object.store(Time.now.strftime("%Y%m%d-%H%M%S.#{random_string}.sql.gpg"), tempfile, configuration["aws_bucket"])
+      filename = Time.now.strftime("%Y%m%d-%H%M%S.#{random_string}.sql.gpg")
+      stats    = File.stat(filename)
+
+      AWS::S3::S3Object.store(filename, tempfile, configuration["aws_bucket"])
+
+      stmt = db.prepare("INSERT INTO files (filename, file_size, file_time), VALUES(?, ?, ?)")
+      stmt.execute(filename, stats.size, stats.mtime.strftime("%Y-%m-%d %H:%M:%S")
     end
   end
 
