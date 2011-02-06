@@ -54,7 +54,7 @@ class Yob
       AWS::S3::S3Object.store(filename, tempfile, configuration["aws_bucket"])
 
       stmt = db.prepare("INSERT INTO files (filename, file_size, file_time), VALUES(?, ?, ?)")
-      stmt.execute(filename, stats.size, stats.mtime.strftime("%Y-%m-%d %H:%M:%S")
+      stmt.execute(filename, stats.size, stats.mtime.strftime("%Y-%m-%d %H:%M:%S"))
     end
   end
 
