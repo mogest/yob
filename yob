@@ -52,6 +52,7 @@ class Yob
       stats    = File.stat(filename)
 
       AWS::S3::S3Object.store(filename, tempfile, configuration["aws_bucket"])
+      grant_access_to_file(filename)
 
       stmt = db.prepare("INSERT INTO files (filename, file_size, file_time), VALUES(?, ?, ?)")
       stmt.execute(filename, stats.size, stats.mtime.strftime("%Y-%m-%d %H:%M:%S"))
@@ -78,6 +79,7 @@ class Yob
         crypted_filename = "#{File.basename(filename)}.#{random_string}.gpg"
         puts "uploading #{crypted_filename}"
         AWS::S3::S3Object.store(crypted_filename, crypted_file_data, configuration["aws_bucket"])
+        grant_access_to_file(crypted_filename)
         puts "uploaded"
 
         if row
@@ -90,8 +92,21 @@ class Yob
     end
   end
 
+
+  private
   def random_string
     (0..15).inject("") {|s, i| s << (97 + rand(26)).chr}
+  end
+
+  def grant_access_to_file(file)
+    grant = AWS::S3::ACL::Grant.new
+    grant.permission = "FULL_CONTROL"
+    grant.grantee = AWS::S3::ACL::Grantee.new
+    grant.grantee.email_address = "accounts@youdo.co.nz"
+
+    policy = AWS::S3::S3Object.acl(file, configuration["aws_bucket"])
+    policy.grants << grant
+    AWS::S3::S3Object.acl(file, configuration["aws_bucket"], policy)
   end
 end
 
