@@ -11,11 +11,10 @@ class Yob
 
   module Database
     class Base
-      attr_reader :configuration, :db, :keys, :store
+      attr_reader :configuration, :keys, :store
 
-      def initialize(configuration, db, keys, store)
+      def initialize(configuration, keys, store)
         @configuration = configuration
-        @db = db
         @keys = keys
         @store = store
       end
@@ -34,13 +33,13 @@ class Yob
         encrypt_and_store_from_io(reader, filename_strftime_format)
       end
 
-      def encrypt_and_store_from_io(io, filename_strftime_format, file_id = nil, close_io = true)
+      def encrypt_and_store_from_io(io, filename_strftime_format, close_io = true)
         stats = io.stat
         Tempfile.open("yob") do |tempfile|
           tempfile.unlink
 
           puts "encrypting started"
-          GPGME.encrypt(keys, io, tempfile)
+          GPGME.encrypt(keys, io, tempfile, :always_trust => true)
           puts "encrypting done"
 
           io.close if io.respond_to?(:close) && close_io
@@ -51,24 +50,16 @@ class Yob
           puts "passing to store"
           @store.store filename, tempfile
           puts "stored"
-
-          file_time = stats.mtime.strftime("%Y-%m-%d %H:%M:%S")
-          if file_id
-            db.execute("UPDATE files SET file_size = ?, file_time = ? WHERE id = ?", stats.size, file_time, file_id)
-          else
-            stmt = db.prepare("INSERT INTO files (filename, file_size, file_time) VALUES (?, ?, ?)")
-            stmt.execute(filename, stats.size, file_time)
-          end
         end
       end
 
-      def random_string
-        (0..15).inject("") {|s, i| s << (97 + rand(26)).chr}
+      def random_filename_string
+        (0..15).inject(".") {|s, i| s << (97 + rand(26)).chr} if configuration.fetch('randomise_filename')
       end
     end
 
     class Mysql < Base
-      def initialize(configuration, db, keys, store)
+      def initialize(configuration, keys, store)
         super
         unless File.directory?(configuration["mysql_log_directory"])
           raise Yob::ConfigurationError, "mysql_log_directory does not exist"
@@ -77,10 +68,13 @@ class Yob
         unless File.exists?(configuration["mysqldump_executable"])
           raise Yob::ConfigurationError, "mysqldump_executable does not exist"
         end
+
+        @db = SQLite3::Database.new(configuration.fetch("file_database", "#{File.dirname(__FILE__)}/yob.db"))
+        @db.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, filename varchar(255) unique not null, file_size integer not null, file_time datetime not null)")
       end
 
       def full_backup
-        encrypt_and_store_pipe("%Y%m%d-%H%M%S.#{random_string}.sql.gpg") do |writer|
+        encrypt_and_store_pipe("%Y%m%d-%H%M%S#{random_filename_string}.sql.gpg") do |writer|
           system("#{configuration["mysqldump_executable"]} --all-databases --skip-opt --create-options --add-drop-database --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
         end
       end
@@ -93,12 +87,19 @@ class Yob
           stats = File.stat(filename)
           file_time = stats.mtime.strftime("%Y-%m-%d %H:%M:%S")
 
-          row = db.get_first_row("SELECT id, file_size, file_time FROM files WHERE filename = ?", filename)
+          row = @db.get_first_row("SELECT id, file_size, file_time FROM files WHERE filename = ?", filename)
           if row && row[1].to_i == stats.size && row[2] == file_time
             puts "skipping #{filename}"
           else
             File.open(filename, "r") do |logfile|
-              encrypt_and_store_from_io logfile, "#{File.basename(filename)}.#{random_string}.gpg", row[0]
+              encrypt_and_store_from_io logfile, "#{File.basename(filename)}#{random_filename_string}.gpg"
+            end
+
+            if row
+              @db.execute("UPDATE files SET file_size = ?, file_time = ? WHERE id = ?", stats.size, file_time, row[0])
+            else
+              stmt = @db.prepare("INSERT INTO files (filename, file_size, file_time) VALUES (?, ?, ?)")
+              stmt.execute(filename, stats.size, file_time)
             end
           end
         end
@@ -106,7 +107,7 @@ class Yob
     end
 
     class Postgresql < Base
-      def initialize(configuration, db, keys, store)
+      def initialize(configuration, keys, store)
         super
         require 'archive/tar/minitar'
       end
@@ -117,7 +118,7 @@ class Yob
         connect_and_execute "SELECT pg_start_backup('yob')"
 
         begin
-          encrypt_and_store_pipe("%Y%m%d-%H%M%S.#{random_string}.tar.gpg") do |writer|
+          encrypt_and_store_pipe("%Y%m%d-%H%M%S#{random_filename_string}.tar.gpg") do |writer|
             puts "tar starting"
             tar = Archive::Tar::Minitar::Output.new(writer)
             begin
@@ -141,7 +142,7 @@ class Yob
         destination_filename = ARGV[2]
 
         File.open(full_path, "r") do |file|
-          encrypt_and_store_from_io file, destination_filename
+          encrypt_and_store_from_io file, "#{destination_filename}#{random_filename_string}"
         end
       end
 
@@ -208,15 +209,12 @@ class Yob
 
 
   def initialize(configuration)
-    db = SQLite3::Database.new(configuration.fetch("file_database", "#{File.dirname(__FILE__)}/yob.db"))
-    db.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, filename varchar(255) unique not null, file_size integer not null, file_time datetime not null)")
-
     keys = configuration["encryption_key_names"].collect {|name| GPGME.list_keys(name).first}
     raise ConfigurationError, "One or more encryption keys not found in GnuPG keychain" if keys.empty? || !keys.all?
 
     @configuration = configuration
     store = store_handler_class.new(configuration)
-    @database = database_handler_class.new(configuration, db, keys, store)
+    @database = database_handler_class.new(configuration, keys, store)
   end
 
   def full_backup
