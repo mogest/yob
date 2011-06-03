@@ -148,12 +148,21 @@ class Yob
 
       protected
       def connect_and_execute(sql)
+        hostname = @configuration["postgresql_hostname"]
+        port = @configuration["postgresql_port"]
+        if hostname || port
+          hostname ||= "localhost"
+          port ||= 5432
+        end
+
         connection = PGconn.connect(
-          @configuration.fetch("postgresql_hostname", "localhost"),
-          @configuration.fetch("postgresql_port", 5432),
-          '',
-          '',
-          @configuration.fetch("postgresql_default_database", "postgres"))
+          hostname, # nil if UNIX socket
+          port,     # nil if UNIX socket
+          '',       # options
+          '',       # unused by library
+          @configuration.fetch("postgresql_default_database", "postgres"),
+          @configuration["postgresql_username"],
+          @configuration["postgresql_password"])
 
         connection.exec(sql)
         connection.close
