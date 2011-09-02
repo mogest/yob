@@ -75,7 +75,7 @@ class Yob
 
       def full_backup
         encrypt_and_store_pipe("%Y%m%d-%H%M%S#{random_filename_string}.sql.gpg") do |writer|
-          system("#{configuration["mysqldump_executable"]} --all-databases --skip-opt --create-options --add-drop-database --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
+          system("#{configuration["mysqldump_executable"]} --all-databases --default-character-set=utf8 --skip-opt --create-options --add-drop-database --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
         end
       end
 
