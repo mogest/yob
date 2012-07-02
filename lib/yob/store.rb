@@ -29,16 +29,27 @@ module Yob::Store
     def store(filename, file_handle)
       puts "Store::AWS: uploading #{filename}"
       object = s3_bucket.objects["#{@configuration["aws_filename_prefix"]}#{filename}"]
+
+      exception = nil
       object.multipart_upload do |upload|
-        print "Store::AWS: multipart upload started\n" if @configuration["debug"]
-        bytes = 0
-        while data = file_handle.read(BLOCK_SIZE)
-          break if data.length == 0
-          bytes += data.length
-          upload.add_part(data)
-          print "Store::AWS: #{bytes} bytes sent\n" if @configuration["debug"]
+        begin
+          print "Store::AWS: multipart upload started\n" if @configuration["debug"]
+          bytes = 0
+          while data = file_handle.read(BLOCK_SIZE)
+            break if data.length == 0
+            bytes += data.length
+            upload.add_part(data)
+            print "Store::AWS: #{bytes} bytes sent\n" if @configuration["debug"]
+          end
+        rescue Exception => e
+          # This is awful.  #multipart_upload rescues and throws away exceptions.
+          # We have to store it so we know that it ever happened.
+          exception = e
+          raise
         end
       end
+
+      raise exception if exception
 
       if grant_to = @configuration["aws_grant_access_to"]
         puts "Store::AWS: granting access to #{filename}"

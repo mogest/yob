@@ -15,6 +15,7 @@ module Yob::Encrypt
         encrypt(rd, output_pipe)
       end
       rd.close
+      output_pipe.close # the fork takes ownership of this descriptor
       wr
     end
 
