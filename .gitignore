@@ -2,3 +2,4 @@
 yob.yml
 .*.swp
 yob.db
+*.gem

@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+
+require 'yob'
+
+def run
+  yob = Yob.new(Yob::Configuration.new(ARGV))
+  case ARGV[0]
+  when 'full'
+    yob.backup :full_backup
+  when 'partial'
+    yob.backup :partial_backup
+  else
+    puts "specify 'full' or 'partial' on the command line"
+    exit 1
+  end
+rescue Yob::Configuration::Error => e
+  $stderr.puts e.message
+  exit 1
+end
+
+run
