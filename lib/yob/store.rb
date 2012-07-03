@@ -31,7 +31,7 @@ module Yob::Store
 
       data = file_handle.read(BLOCK_SIZE)
       if data.nil? || data.length == 0
-        print "[Store::AWS] no file data received, upload aborted"
+        puts "[Store::AWS] no file data received, upload aborted"
         return
       end
 
@@ -42,12 +42,12 @@ module Yob::Store
       else
         upload = object.multipart_uploads.create
         begin
-          print "[Store::AWS] multipart upload started\n" if @configuration["debug"]
+          puts "[Store::AWS] multipart upload started" if @configuration["debug"]
           bytes = 0
           while data && data.length > 0
             upload.add_part(data)
             bytes += data.length
-            print "[Store::AWS] #{bytes} bytes sent\n" if @configuration["debug"]
+            puts "[Store::AWS] #{bytes} bytes sent" if @configuration["debug"]
             data = file_handle.read(BLOCK_SIZE)
           end
           upload.close

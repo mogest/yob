@@ -3,7 +3,7 @@ spec = Gem::Specification.new do |s|
   s.version = '1.0.0'
   s.summary = "YouDo Online Backup"
   s.description = "YouDo Online Backup"
-  s.files = %w(README lib/yob.rb bin/yob) + Dir['lib/**/*.rb']
+  s.files = %w(README.rdoc lib/yob.rb bin/yob) + Dir['lib/**/*.rb']
   s.executables << "yob"
   s.has_rdoc = false
   s.author = "Roger Nesbitt"
