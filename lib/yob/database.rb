@@ -30,9 +30,9 @@ module Yob::Database
     def full_backup
       writer = yield Time.now.strftime("%Y%m%d-%H%M%S#{random_filename_string}.sql.gpg"), nil
       begin
-        puts "Database::Mysql: Dumping database..."
+        puts "[Database::Mysql] dumping all databases to SQL..."
         system("#{configuration.mysqldump_executable} --all-databases --default-character-set=utf8 --skip-opt --create-options --add-drop-database --extended-insert --flush-logs --master-data --quick --single-transaction >&#{writer.fileno}")
-        puts "Database::Mysql: Database dumped."
+        puts "[Database::Mysql] dump completed"
       ensure
         writer.close
       end
@@ -53,7 +53,7 @@ module Yob::Database
 
         row = @db.get_first_row("SELECT id, file_size, file_time FROM files WHERE filename = ?", filename)
         if row && row[1].to_i == stats.size && row[2] == file_time
-          puts "skipping #{filename}"
+          puts "[Database::Mysql] skipping #{filename}" if @configuration["debug"]
         else
           File.open(filename, "r") do |logfile|
             yield "#{File.basename(filename)}#{random_filename_string}.gpg", logfile

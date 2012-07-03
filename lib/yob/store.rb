@@ -1,6 +1,6 @@
 module Yob::Store
   class AWS
-    BLOCK_SIZE = 1048576
+    BLOCK_SIZE = 1048576 * 5 # must be at least 5 MB
 
     attr_reader :pid
 
@@ -18,7 +18,6 @@ module Yob::Store
       @pid = fork do
         $0 = "yob: AWS S3 storage"
         wr.close
-        #IO.select([rd]) # wait until there's some input before starting up the storage to prevent timeouts
         store(filename, rd)
         rd.close
       end
@@ -27,36 +26,43 @@ module Yob::Store
     end
 
     def store(filename, file_handle)
-      puts "Store::AWS: uploading #{filename}"
+      puts "[Store::AWS] uploading #{filename}"
       object = s3_bucket.objects["#{@configuration["aws_filename_prefix"]}#{filename}"]
 
-      exception = nil
-      object.multipart_upload do |upload|
+      data = file_handle.read(BLOCK_SIZE)
+      if data.nil? || data.length == 0
+        print "[Store::AWS] no file data received, upload aborted"
+        return
+      end
+
+      # If the entire file is less than BLOCK_SIZE, send it in one hit.
+      # Otherwise use AWS's multipart upload feature.  Note that each part must be at least 5MB.
+      if data.length < BLOCK_SIZE
+        object.write(data)
+      else
+        upload = object.multipart_uploads.create
         begin
-          print "Store::AWS: multipart upload started\n" if @configuration["debug"]
+          print "[Store::AWS] multipart upload started\n" if @configuration["debug"]
           bytes = 0
-          while data = file_handle.read(BLOCK_SIZE)
-            break if data.length == 0
-            bytes += data.length
+          while data && data.length > 0
             upload.add_part(data)
-            print "Store::AWS: #{bytes} bytes sent\n" if @configuration["debug"]
+            bytes += data.length
+            print "[Store::AWS] #{bytes} bytes sent\n" if @configuration["debug"]
+            data = file_handle.read(BLOCK_SIZE)
           end
-        rescue Exception => e
-          # This is awful.  #multipart_upload rescues and throws away exceptions.
-          # We have to store it so we know that it ever happened.
-          exception = e
+          upload.close
+        rescue
+          upload.abort
           raise
         end
       end
 
-      raise exception if exception
-
       if grant_to = @configuration["aws_grant_access_to"]
-        puts "Store::AWS: granting access to #{filename}"
+        puts "[Store::AWS] granting access to #{filename}"
         object.acl = access_control_list(grant_to)
       end
 
-      puts "Store::AWS: uploaded"
+      puts "[Store::AWS] uploaded"
     end
 
     protected

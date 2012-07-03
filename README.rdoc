@@ -1,0 +1,27 @@
+= YOB
+
+An online backup system for MySQL and PostgreSQL, using GnuPG for encryption and AWS S3 for storage.
+
+YOB is pluggable, so it's easy to make different database, encryption and storage engines.
+
+== Install
+
+You'll need a few libraries installed.
+
+  aptitude install libgpgme11-dev libsqlite3-dev libxml2-dev libxslt-dev libopenssl-ruby1.8
+
+Install yob from rubygems:
+
+  gem install yob
+
+Then:
+
+  useradd --home-dir /var/lib/yob --create-home yob
+
+If you're using MySQL, create ~yob/.my.cnf with mysql username and password and
+
+  GRANT select,reload,super,replication client ON *.* TO yob@localhost IDENTIFIED BY 'somepassword'
+
+== Licence
+
+Licenced under the MIT licence.  Copyright 2011-2012 YouDo Limited.

@@ -10,6 +10,7 @@ spec = Gem::Specification.new do |s|
   s.email = "roger@youdo.co.nz"
 
   s.add_runtime_dependency "sqlite3"
+  s.add_runtime_dependency "minitar"
   s.add_runtime_dependency "aws-sdk"
   s.add_runtime_dependency "gpgme"
 end

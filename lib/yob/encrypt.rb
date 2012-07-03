@@ -20,7 +20,7 @@ module Yob::Encrypt
     end
 
     def encrypt(rd, wr)
-      puts "Encrypt::GnuPG: encrypting input"
+      puts "[Encrypt::GnuPG] encrypting input"
 
       plain_data = GPGME::Data.new(rd)
       cipher_data = GPGME::Data.new(wr)
@@ -30,7 +30,7 @@ module Yob::Encrypt
         ctx.encrypt(keys, plain_data, cipher_data, GPGME::ENCRYPT_ALWAYS_TRUST)
       end
 
-      puts "Encrypt::GnuPG: encrypting complete"
+      puts "[Encrypt::GnuPG] encrypting complete"
     end
   end
 end
